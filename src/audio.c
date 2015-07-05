@@ -763,16 +763,17 @@ static void timeout_tx(void *arg)
 
 
 static void aufilt_param_set(struct aufilt_prm *prm,
-			     const struct aucodec *ac, uint32_t ptime)
+			     const struct aucodec *ac, uint32_t ptime,
+			     struct audio *audio)
 {
 	if (!ac) {
 		memset(prm, 0, sizeof(*prm));
-		return;
+	} else {
+		prm->srate      = get_srate(ac);
+		prm->ch         = ac->ch;
+		prm->ptime      = ptime;
 	}
-
-	prm->srate      = get_srate(ac);
-	prm->ch         = ac->ch;
-	prm->ptime      = ptime;
+	prm->audio = audio;
 }
 
 
@@ -850,8 +851,8 @@ static int aufilt_setup(struct audio *a)
 	if (!list_isempty(&tx->filtl) || !list_isempty(&rx->filtl))
 		return 0;
 
-	aufilt_param_set(&encprm, tx->ac, tx->ptime);
-	aufilt_param_set(&decprm, rx->ac, rx->ptime);
+	aufilt_param_set(&encprm, tx->ac, tx->ptime, a);
+	aufilt_param_set(&decprm, rx->ac, rx->ptime, a);
 
 	/* Audio filters */
 	for (le = list_head(aufilt_list()); le; le = le->next) {
