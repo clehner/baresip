@@ -44,10 +44,6 @@ enum call_window_events {
 	MQ_TRANSFER,
 };
 
-static struct call_window *last_call_win = NULL;
-static struct vumeter_dec *last_dec = NULL;
-static struct vumeter_enc *last_enc = NULL;
-
 
 static void call_window_update_duration(struct call_window *win) {
 	gchar buf[32];
@@ -108,7 +104,7 @@ static void vumeter_timer_stop(struct call_window *win) {
 	gtk_progress_bar_set_fraction(win->progress.dec, 0);
 }
 
-static void call_window_set_vu_dec(struct call_window *win,
+void call_window_set_vu_dec(struct call_window *win,
 		struct vumeter_dec *dec)
 {
 	if (win->vu.dec)
@@ -117,7 +113,7 @@ static void call_window_set_vu_dec(struct call_window *win,
 	vumeter_timer_start(win);
 }
 
-static void call_window_set_vu_enc(struct call_window *win,
+void call_window_set_vu_enc(struct call_window *win,
 		struct vumeter_enc *enc)
 {
 	if (win->vu.enc)
@@ -125,35 +121,6 @@ static void call_window_set_vu_enc(struct call_window *win,
 	win->vu.enc = mem_ref(enc);
 	vumeter_timer_start(win);
 }
-
-/* This is a hack to associate a call with its vumeters */
-
-void call_window_got_vu_dec(struct vumeter_dec *dec)
-{
-	if (last_call_win)
-		call_window_set_vu_dec(last_call_win, dec);
-	else
-		last_dec = dec;
-}
-
-void call_window_got_vu_enc(struct vumeter_enc *enc)
-{
-	if (last_call_win)
-		call_window_set_vu_enc(last_call_win, enc);
-	else
-		last_enc = enc;
-}
-
-static void got_call_window(struct call_window *win)
-{
-	if (last_enc)
-		call_window_set_vu_enc(win, last_enc);
-	if (last_dec)
-		call_window_set_vu_dec(win, last_dec);
-	if (!last_enc || !last_dec)
-		last_call_win = win;
-}
-
 
 static void call_on_hangup(GtkToggleButton *btn, struct call_window *win)
 {
@@ -288,8 +255,6 @@ static void call_window_destructor(void *arg)
 		g_source_remove(window->duration_timer_tag);
 	if (window->vumeter_timer_tag)
 		g_source_remove(window->vumeter_timer_tag);
-	/* TODO: avoid race conditions here */
-	last_call_win = NULL;
 }
 
 struct call_window *call_window_new(struct call *call, struct gtk_mod *mod)
@@ -421,8 +386,6 @@ struct call_window *call_window_new(struct call *call, struct gtk_mod *mod)
 	win->vu.enc = NULL;
 	win->vu.dec = NULL;
 
-	got_call_window(win);
-
 out:
 	if (err)
 		mem_deref(win);
@@ -469,7 +432,6 @@ void call_window_progress(struct call_window *win)
 {
 	win->duration_timer_tag = gdk_threads_add_timeout_seconds(1,
 			call_timer, win);
-	last_call_win = win;
 	call_window_set_status(win, "progress");
 }
 
@@ -478,7 +440,6 @@ void call_window_established(struct call_window *win)
 	call_window_update_duration(win);
 	win->duration_timer_tag = gdk_threads_add_timeout_seconds(1,
 			call_timer, win);
-	last_call_win = win;
 	call_window_set_status(win, "established");
 }
 
@@ -492,4 +453,9 @@ void call_window_transfer_failed(struct call_window *win, const char *reason)
 bool call_window_is_for_call(struct call_window *win, struct call *call)
 {
 	return win->call == call;
+}
+
+bool call_window_is_for_audio(struct call_window *win, struct audio *audio)
+{
+	return call_audio(win->call) == audio;
 }

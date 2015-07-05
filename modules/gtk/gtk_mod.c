@@ -379,6 +379,20 @@ static struct call_window *get_create_call_window(struct gtk_mod *mod,
 }
 
 
+static struct call_window *get_call_window_for_audio(struct gtk_mod *mod,
+		struct audio *audio)
+{
+	GSList *wins;
+
+	for (wins = mod->call_windows; wins; wins = wins->next) {
+		struct call_window *win = wins->data;
+		if (call_window_is_for_audio(win, audio))
+			return win;
+	}
+	return NULL;
+}
+
+
 void gtk_mod_call_window_closed(struct gtk_mod *mod, struct call_window *win)
 {
 	mod->call_windows = g_slist_remove(mod->call_windows, win);
@@ -779,10 +793,11 @@ static int vu_encode_update(struct aufilt_enc_st **stp, void **ctx,
 			 const struct aufilt *af, struct aufilt_prm *prm)
 {
 	struct vumeter_enc *st;
-	(void)ctx;
-	(void)prm;
+	struct gtk_mod *mod = &mod_obj;
+	struct call_window *win = get_call_window_for_audio(mod, prm->audio);
+	*ctx = win;
 
-	if (!stp || !af)
+	if (!stp || !af || !win)
 		return EINVAL;
 
 	if (*stp)
@@ -793,7 +808,7 @@ static int vu_encode_update(struct aufilt_enc_st **stp, void **ctx,
 		return ENOMEM;
 
 	gdk_threads_enter();
-	call_window_got_vu_enc(st);
+	call_window_set_vu_enc(win, st);
 	gdk_threads_leave();
 
 	*stp = (struct aufilt_enc_st *)st;
@@ -806,10 +821,10 @@ static int vu_decode_update(struct aufilt_dec_st **stp, void **ctx,
 			 const struct aufilt *af, struct aufilt_prm *prm)
 {
 	struct vumeter_dec *st;
-	(void)ctx;
+	struct call_window *win = *ctx;
 	(void)prm;
 
-	if (!stp || !af)
+	if (!stp || !af || !win)
 		return EINVAL;
 
 	if (*stp)
@@ -820,7 +835,7 @@ static int vu_decode_update(struct aufilt_dec_st **stp, void **ctx,
 		return ENOMEM;
 
 	gdk_threads_enter();
-	call_window_got_vu_dec(st);
+	call_window_set_vu_dec(win, st);
 	gdk_threads_leave();
 
 	*stp = (struct aufilt_dec_st *)st;
