@@ -331,6 +331,7 @@ struct aufilt_prm {
 	uint32_t srate;       /**< Sampling rate in [Hz]        */
 	uint8_t  ch;          /**< Number of channels           */
 	uint32_t ptime;       /**< Wanted packet-time in [ms]   */
+	struct audio *audio;
 };
 
 typedef int (aufilt_encupd_h)(struct aufilt_enc_st **stp, void **ctx,
