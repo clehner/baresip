@@ -106,7 +106,6 @@ static void menu_on_quit(GtkMenuItem *menuItem, gpointer arg)
 	g_object_unref(G_OBJECT(mod->status_icon));
 
 	mqueue_push(mod->mq, MQ_QUIT, 0);
-	info("quit from gtk\n");
 }
 
 static void menu_on_dial(GtkMenuItem *menuItem, gpointer arg)
@@ -565,6 +564,7 @@ static void mqueue_handler(int id, void *data, void *arg)
 		break;
 
 	case MQ_QUIT:
+		info("quit from gtk\n");
 		ua_stop_all(false);
 		break;
 
@@ -706,8 +706,6 @@ static void *gtk_thread(void *arg)
 
 	g_action_map_add_action_entries(G_ACTION_MAP(mod->app),
 			app_entries, G_N_ELEMENTS(app_entries), mod);
-
-	info("gtk_menu starting\n");
 
 	mod->run = true;
 	gtk_main();
@@ -867,6 +865,8 @@ static int module_init(void)
 	err  = cmd_register(cmdv, ARRAY_SIZE(cmdv));
 	err |= uag_event_register(ua_event_handler, &mod_obj);
 	err |= message_init(message_handler, &mod_obj);
+
+	info("gtk module starting\n");
 
 	return err;
 }
