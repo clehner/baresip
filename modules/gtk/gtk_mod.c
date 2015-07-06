@@ -807,9 +807,7 @@ static int vu_encode_update(struct aufilt_enc_st **stp, void **ctx,
 	if (!st)
 		return ENOMEM;
 
-	gdk_threads_enter();
 	call_window_set_vu_enc(win, st);
-	gdk_threads_leave();
 
 	*stp = (struct aufilt_enc_st *)st;
 
@@ -834,9 +832,7 @@ static int vu_decode_update(struct aufilt_dec_st **stp, void **ctx,
 	if (!st)
 		return ENOMEM;
 
-	gdk_threads_enter();
 	call_window_set_vu_dec(win, st);
-	gdk_threads_leave();
 
 	*stp = (struct aufilt_dec_st *)st;
 
