@@ -11,6 +11,7 @@
 #include <gtk/gtk.h>
 #include <gio/gio.h>
 #include "gtk_mod.h"
+#include "gmqueue.h"
 
 /* About */
 #define COPYRIGHT " Copyright (C) 2010 - 2015 Alfred E. Heggestad et al."
@@ -33,6 +34,7 @@ struct gtk_mod {
 	bool contacts_inited;
 	bool accounts_inited;
 	struct mqueue *mq;
+	struct gmqueue *gmq;
 	GApplication *app;
 	GtkStatusIcon *status_icon;
 	GtkWidget *app_menu;
@@ -56,6 +58,11 @@ enum gtk_mod_events {
 	MQ_ANSWER,      /* Answer a call */
 	MQ_HANGUP,      /* Hang up a call */
 	MQ_SELECT_UA,   /* Set the current UA */
+};
+
+enum gtk_mod_g_events {
+	GMQ_POPUP,
+	GMQ_NEW_CALL_WINDOW,
 };
 
 static void answer_activated(GSimpleAction *, GVariant *, gpointer);
@@ -132,7 +139,7 @@ static void menu_on_dial(GtkMenuItem *menuItem, gpointer arg)
 	struct gtk_mod *mod = arg;
 	(void)menuItem;
 	if (!mod->dial_dialog)
-		 mod->dial_dialog = dial_dialog_alloc(mod);
+		 mod->dial_dialog = dial_dialog_new(mod);
 	dial_dialog_show(mod->dial_dialog);
 }
 
@@ -348,7 +355,7 @@ static struct call_window *new_call_window(struct gtk_mod *mod,
 		struct call *call)
 {
 	struct call_window *win = call_window_new(call, mod);
-	if (call) {
+	if (win) {
 		mod->call_windows = g_slist_append(mod->call_windows, win);
 	}
 	return win;
@@ -396,6 +403,11 @@ static struct call_window *get_call_window_for_audio(struct gtk_mod *mod,
 void gtk_mod_call_window_closed(struct gtk_mod *mod, struct call_window *win)
 {
 	mod->call_windows = g_slist_remove(mod->call_windows, win);
+}
+
+void gtk_mod_call_hangup(struct gtk_mod *mod, struct call *call)
+{
+	mqueue_push(mod->mq, MQ_HANGUP, call);
 }
 
 static void ua_event_handler(struct ua *ua,
@@ -520,7 +532,28 @@ void gtk_mod_connect(struct gtk_mod *mod, const char *uri)
 	mqueue_push(mod->mq, MQ_CONNECT, (char *)uri);
 }
 
+/* run in the gtk thread */
+static void gmqueue_handler(int id, void *data, void *arg)
+{
+	struct gtk_mod *mod = arg;
+	struct call *call;
 
+	switch ((enum gtk_mod_g_events)id) {
+
+	case GMQ_POPUP:
+		popup_menu(mod, NULL, NULL, 0, GPOINTER_TO_UINT(data));
+		break;
+
+	case GMQ_NEW_CALL_WINDOW:
+		call = data;
+		if (!new_call_window(mod, call))
+			mqueue_push(mod->mq, MQ_HANGUP, call);
+		break;
+	}
+}
+
+
+/* run in the re thread */
 static void mqueue_handler(int id, void *data, void *arg)
 {
 	struct gtk_mod *mod = arg;
@@ -544,9 +577,7 @@ static void mqueue_handler(int id, void *data, void *arg)
 		break;
 
 	case MQ_POPUP:
-		gdk_threads_enter();
-		popup_menu(mod, NULL, NULL, 0, GPOINTER_TO_UINT(data));
-		gdk_threads_leave();
+		gmqueue_push(mod->gmq, GMQ_POPUP, data);
 		break;
 
 	case MQ_CONNECT:
@@ -558,12 +589,7 @@ static void mqueue_handler(int id, void *data, void *arg)
 					"Error: %m", uri, err);
 			break;
 		}
-		gdk_threads_enter();
-		err = new_call_window(mod, call) == NULL;
-		gdk_threads_leave();
-		if (err) {
-			ua_hangup(ua, call, 500, "Server Error");
-		}
+		gmqueue_push(mod->gmq, GMQ_NEW_CALL_WINDOW, call);
 		break;
 
 	case MQ_HANGUP:
@@ -588,13 +614,7 @@ static void mqueue_handler(int id, void *data, void *arg)
 					call_peername(call), err);
 			break;
 		}
-
-		gdk_threads_enter();
-		err = new_call_window(mod, call) == NULL;
-		gdk_threads_leave();
-		if (err) {
-			ua_hangup(ua, call, 500, "Server Error");
-		}
+		gmqueue_push(mod->gmq, GMQ_NEW_CALL_WINDOW, call);
 		break;
 
 	case MQ_SELECT_UA:
@@ -723,7 +743,7 @@ static void *gtk_thread(void *arg)
 	mqueue_push(mod->mq, MQ_QUIT, 0);
 
 	if (mod->dial_dialog) {
-		mem_deref(mod->dial_dialog);
+		dial_dialog_destroy(mod->dial_dialog);
 		mod->dial_dialog = NULL;
 	}
 
@@ -846,19 +866,34 @@ static int module_init(void)
 {
 	int err;
 
+	mod_obj.gmq = gmqueue_new(gmqueue_handler, &mod_obj);
+	if (!mod_obj.gmq)
+		return ENOMEM;
+
 	err = mqueue_alloc(&mod_obj.mq, mqueue_handler, &mod_obj);
 	if (err)
-		return err;
-	err = pthread_create(&mod_obj.thread, NULL, gtk_thread,
-			     &mod_obj);
-	if (err) {
-		mem_deref(&mod_obj.mq);
-		return err;
-	}
+		goto err_gmq;
+
+	err = pthread_create(&mod_obj.thread, NULL, gtk_thread, &mod_obj);
+	if (err)
+		goto err_mq;
 
 	info("gtk module starting\n");
 
 	return 0;
+ err_mq:
+	mem_deref(mod_obj.mq);
+ err_gmq:
+	gmqueue_destroy(mod_obj.gmq);
+
+	return err;
+}
+
+static gboolean quitter(void *unused)
+{
+	(void)unused;
+	gtk_main_quit();
+	return G_SOURCE_REMOVE;
 }
 
 static int module_close(void)
@@ -871,9 +906,8 @@ static int module_close(void)
 		cmd_unregister(cmdv);
 		aufilt_unregister(&vumeter);
 
-		gdk_threads_enter();
-		gtk_main_quit();
-		gdk_threads_leave();
+		/* quit GTK main loop, asynchronously */
+		g_idle_add(quitter, NULL);
 	}
 
 	err = pthread_join(mod_obj.thread, NULL);

@@ -4,12 +4,13 @@
  * Copyright (C) 2015 Charles E. Lehner
  */
 #include <re.h>
+#include <baresip.h>
 #include <gtk/gtk.h>
 #include "gtk_mod.h"
 
 struct warning_prm {
 	const char *title;
-	struct mbuf *msg;
+	char *msg;
 };
 
 
@@ -40,8 +41,8 @@ static gboolean on_idle(gpointer arg)
 {
 	struct warning_prm *prm = arg;
 
-	warning_dialog_real(prm):
-		mem_deref(prm);
+	warning_dialog_real(prm);
+	mem_deref(prm);
 
 	return G_SOURCE_REMOVE;
 }
@@ -58,21 +59,15 @@ void warning_dialog(const char *title, const char *fmt, ...)
 	if (!prm)
 		goto err;
 
-	if (!(prm->msg = mbuf_alloc(64)))
-		goto err_prm;
-
-	if (mbuf_vprintf(str_buf, fmt, ap))
-		goto err_msg;
+	if (re_vsdprintf(&prm->msg, fmt, ap) < 0)
+		goto err;
 
 	prm->title = title;
 	gdk_threads_add_idle(on_idle, prm);
 	goto out;
 
- err_msg:
-	mem_deref(prm->msg);
- err_prm:
-	mem_deref(prm);
  err:
+	mem_deref(prm);
 	vlog(LEVEL_WARN, fmt, ap);
  out:
 	va_end(ap);

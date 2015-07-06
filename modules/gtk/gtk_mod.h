@@ -24,9 +24,11 @@ struct vumeter_dec {
 /* Main menu */
 void gtk_mod_connect(struct gtk_mod *, const char *uri);
 void gtk_mod_call_window_closed(struct gtk_mod *, struct call_window *);
+void gtk_mod_call_hangup(struct gtk_mod *, struct call *);
 
 /* Call Window */
 struct call_window *call_window_new(struct call *call, struct gtk_mod *mod);
+void call_window_destroy(struct call_window *);
 void call_window_set_vu_dec(struct call_window *, struct vumeter_dec *);
 void call_window_set_vu_enc(struct call_window *, struct vumeter_enc *);
 void call_window_transfer(struct call_window *, const char *uri);
@@ -39,8 +41,9 @@ bool call_window_is_for_call(struct call_window *, struct call *);
 bool call_window_is_for_audio(struct call_window *, struct audio *);
 
 /* Dial Dialog */
-struct dial_dialog *dial_dialog_alloc(struct gtk_mod *);
+struct dial_dialog *dial_dialog_new(struct gtk_mod *);
 void dial_dialog_show(struct dial_dialog *);
+void dial_dialog_destroy(struct dial_dialog *);
 
 /* Call transfer dialog */
 struct transfer_dialog *transfer_dialog_alloc(struct call_window *);
