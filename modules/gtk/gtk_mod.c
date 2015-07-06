@@ -695,11 +695,9 @@ static void *gtk_thread(void *arg)
 
 	info("gtk_menu starting\n");
 
-	uag_event_register( ua_event_handler, mod );
 	mod->run = true;
 	gtk_main();
 	mod->run = false;
-	uag_event_unregister(ua_event_handler);
 
 	if (mod->dial_dialog) {
 		mem_deref(mod->dial_dialog);
@@ -842,29 +840,33 @@ static const struct cmd cmdv[] = {
 
 static int module_init(void)
 {
-	int err = 0;
+	int err;
 
 	err = mqueue_alloc(&mod_obj.mq, mqueue_handler, &mod_obj);
 	if (err)
 		return err;
 	err = pthread_create(&mod_obj.thread, NULL, gtk_thread,
 			     &mod_obj);
-	if (err)
+	if (err) {
+		mem_deref(&mod_obj.mq);
 		return err;
+	}
 
 	aufilt_register(&vumeter);
-	err = message_init(message_handler, &mod_obj);
-	if (err)
-		return err;
-
-	err = cmd_register(cmdv, ARRAY_SIZE(cmdv));
+	err  = cmd_register(cmdv, ARRAY_SIZE(cmdv));
+	err |= uag_event_register(ua_event_handler, &mod_obj);
+	err |= message_init(message_handler, &mod_obj);
 
 	return err;
 }
 
 static int module_close(void)
 {
+	message_close();
+	uag_event_unregister(ua_event_handler);
 	cmd_unregister(cmdv);
+	aufilt_unregister(&vumeter);
+
 	if (mod_obj.run) {
 		gdk_threads_enter();
 		gtk_main_quit();
@@ -872,8 +874,6 @@ static int module_close(void)
 	}
 	pthread_join(mod_obj.thread, NULL);
 	mem_deref(mod_obj.mq);
-	aufilt_unregister(&vumeter);
-	message_close();
 
 	return 0;
 }
