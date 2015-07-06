@@ -46,13 +46,16 @@ struct gtk_mod {
 
 struct gtk_mod mod_obj;
 
+static struct aufilt vumeter;
+
 enum gtk_mod_events {
-	MQ_POPUP,
-	MQ_CONNECT,
-	MQ_QUIT,
-	MQ_ANSWER,
-	MQ_HANGUP,
-	MQ_SELECT_UA,
+	MQ_INIT,        /* GTK thread initialized */
+	MQ_POPUP,       /* Pop up the menu */
+	MQ_CONNECT,	/* Dial a URI */
+	MQ_QUIT,        /* GTK thread is exiting */
+	MQ_ANSWER,      /* Answer a call */
+	MQ_HANGUP,      /* Hang up a call */
+	MQ_SELECT_UA,   /* Set the current UA */
 };
 
 static void answer_activated(GSimpleAction *, GVariant *, gpointer);
@@ -81,6 +84,22 @@ static struct call *get_call_from_gvariant(GVariant *param)
 }
 
 
+static int cmd_popup_menu(struct re_printf *pf, void *unused)
+{
+	(void)pf;
+	(void)unused;
+
+	mqueue_push(mod_obj.mq, MQ_POPUP, GUINT_TO_POINTER(GDK_CURRENT_TIME));
+
+	return 0;
+}
+
+
+static const struct cmd cmdv[] = {
+	{'G',        0, "Pop up GTK+ menu",         cmd_popup_menu       },
+};
+
+
 static void menu_on_about(GtkMenuItem *menuItem, gpointer arg)
 {
 	(void)menuItem;
@@ -105,7 +124,7 @@ static void menu_on_quit(GtkMenuItem *menuItem, gpointer arg)
 	gtk_widget_destroy(GTK_WIDGET(mod->app_menu));
 	g_object_unref(G_OBJECT(mod->status_icon));
 
-	mqueue_push(mod->mq, MQ_QUIT, 0);
+	gtk_main_quit();
 }
 
 static void menu_on_dial(GtkMenuItem *menuItem, gpointer arg)
@@ -533,6 +552,20 @@ static void mqueue_handler(int id, void *data, void *arg)
 
 	switch ((enum gtk_mod_events)id) {
 
+	case MQ_INIT:
+		aufilt_register(&vumeter);
+		err  = cmd_register(cmdv, ARRAY_SIZE(cmdv));
+		err |= uag_event_register(ua_event_handler, &mod_obj);
+		err |= message_init(message_handler, &mod_obj);
+		if (err) {
+			gdk_threads_enter();
+			warning_dialog("Error initializing baresip",
+					"Error: %m", err);
+			gdk_threads_leave();
+			break;
+		}
+		break;
+
 	case MQ_POPUP:
 		gdk_threads_enter();
 		popup_menu(mod, NULL, NULL, 0, GPOINTER_TO_UINT(data));
@@ -566,6 +599,7 @@ static void mqueue_handler(int id, void *data, void *arg)
 	case MQ_QUIT:
 		info("quit from gtk\n");
 		ua_stop_all(false);
+		info("ok\n");
 		break;
 
 	case MQ_ANSWER:
@@ -707,9 +741,13 @@ static void *gtk_thread(void *arg)
 	g_action_map_add_action_entries(G_ACTION_MAP(mod->app),
 			app_entries, G_N_ELEMENTS(app_entries), mod);
 
+	mqueue_push(mod->mq, MQ_INIT, 0);
+
 	mod->run = true;
 	gtk_main();
 	mod->run = false;
+
+	mqueue_push(mod->mq, MQ_QUIT, 0);
 
 	if (mod->dial_dialog) {
 		mem_deref(mod->dial_dialog);
@@ -831,22 +869,6 @@ static struct aufilt vumeter = {
 };
 
 
-static int cmd_popup_menu(struct re_printf *pf, void *unused)
-{
-	(void)pf;
-	(void)unused;
-
-	mqueue_push(mod_obj.mq, MQ_POPUP, GUINT_TO_POINTER(GDK_CURRENT_TIME));
-
-	return 0;
-}
-
-
-static const struct cmd cmdv[] = {
-	{'G',        0, "Pop up GTK+ menu",         cmd_popup_menu       },
-};
-
-
 static int module_init(void)
 {
 	int err;
@@ -861,32 +883,33 @@ static int module_init(void)
 		return err;
 	}
 
-	aufilt_register(&vumeter);
-	err  = cmd_register(cmdv, ARRAY_SIZE(cmdv));
-	err |= uag_event_register(ua_event_handler, &mod_obj);
-	err |= message_init(message_handler, &mod_obj);
-
 	info("gtk module starting\n");
 
-	return err;
+	return 0;
 }
 
 static int module_close(void)
 {
-	message_close();
-	uag_event_unregister(ua_event_handler);
-	cmd_unregister(cmdv);
-	aufilt_unregister(&vumeter);
+	int err;
 
 	if (mod_obj.run) {
+		message_close();
+		uag_event_unregister(ua_event_handler);
+		cmd_unregister(cmdv);
+		aufilt_unregister(&vumeter);
+
 		gdk_threads_enter();
 		gtk_main_quit();
 		gdk_threads_leave();
 	}
-	pthread_join(mod_obj.thread, NULL);
+
+	err = pthread_join(mod_obj.thread, NULL);
+	if (err) {
+		error("pthread_join: %m\n", err);
+	}
 	mem_deref(mod_obj.mq);
 
-	return 0;
+	return err;
 }
 
 
