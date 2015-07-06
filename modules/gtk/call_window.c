@@ -85,7 +85,7 @@ static gboolean vumeter_timer(gpointer arg) {
 static void vumeter_timer_start(struct call_window *win) {
 	if (!win->vumeter_timer_tag)
 		win->vumeter_timer_tag =
-			g_timeout_add(100, vumeter_timer, win);
+			gdk_threads_add_timeout(100, vumeter_timer, win);
 	if (win->vu.enc)
 		win->vu.enc->avg_rec = 0;
 	if (win->vu.dec)
@@ -426,14 +426,16 @@ void call_window_ringing(struct call_window *win)
 
 void call_window_progress(struct call_window *win)
 {
-	win->duration_timer_tag = g_timeout_add_seconds(1, call_timer, win);
+	win->duration_timer_tag = gdk_threads_add_timeout_seconds(1,
+			call_timer, win);
 	call_window_set_status(win, "progress");
 }
 
 void call_window_established(struct call_window *win)
 {
 	call_window_update_duration(win);
-	win->duration_timer_tag = g_timeout_add_seconds(1, call_timer, win);
+	win->duration_timer_tag = gdk_threads_add_timeout_seconds(1,
+			call_timer, win);
 	call_window_set_status(win, "established");
 }
 
