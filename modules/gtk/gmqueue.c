@@ -36,8 +36,10 @@ static gboolean on_idle(gpointer arg)
 struct gmqueue *gmqueue_new(gmqueue_h *h, void *arg)
 {
 	struct gmqueue *mq = g_new(struct gmqueue, 1);
-	mq->arg = arg;
-	mq->h = h;
+	if (mq) {
+		mq->arg = arg;
+		mq->h = h;
+	}
 	return mq;
 }
 
@@ -56,5 +58,5 @@ void gmqueue_push(struct gmqueue *gmq, int id, void *data)
 	item->mq = gmq;
 	item->id = id;
 	item->data = data;
-	gdk_threads_add_idle(on_idle, gmq);
+	gdk_threads_add_idle(on_idle, item);
 }
