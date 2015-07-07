@@ -226,6 +226,11 @@ static void mqueue_handler(int id, void *data, void *arg)
 
 void call_window_destroy(struct call_window *window)
 {
+	if (window->duration_timer_tag)
+		g_source_remove(window->duration_timer_tag);
+	if (window->vumeter_timer_tag)
+		g_source_remove(window->vumeter_timer_tag);
+
 	gtk_mod_call_window_closed(window->mod, window);
 
 	gtk_widget_destroy(window->window);
@@ -236,11 +241,6 @@ void call_window_destroy(struct call_window *window)
 	mem_deref(window->mq);
 	mem_deref(window->vu.enc);
 	mem_deref(window->vu.dec);
-
-	if (window->duration_timer_tag)
-		g_source_remove(window->duration_timer_tag);
-	if (window->vumeter_timer_tag)
-		g_source_remove(window->vumeter_timer_tag);
 }
 
 struct call_window *call_window_new(struct call *call, struct gtk_mod *mod)
@@ -413,18 +413,23 @@ void call_window_ringing(struct call_window *win)
 	call_window_set_status(win, "ringing");
 }
 
+static void duration_timer_start(struct call_window *win)
+{
+	if (!win->duration_timer_tag)
+		win->duration_timer_tag = gdk_threads_add_timeout_seconds(1,
+				call_timer, win);
+}
+
 void call_window_progress(struct call_window *win)
 {
-	win->duration_timer_tag = gdk_threads_add_timeout_seconds(1,
-			call_timer, win);
+	duration_timer_start(win);
 	call_window_set_status(win, "progress");
 }
 
 void call_window_established(struct call_window *win)
 {
 	call_window_update_duration(win);
-	win->duration_timer_tag = gdk_threads_add_timeout_seconds(1,
-			call_timer, win);
+	duration_timer_start(win);
 	call_window_set_status(win, "established");
 }
 
