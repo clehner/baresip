@@ -64,6 +64,8 @@ enum gtk_mod_events {
 enum gtk_mod_g_events {
 	GMQ_POPUP,
 	GMQ_NEW_CALL_WINDOW,
+	GMQ_UA_EVENT,
+	GMQ_CALL_INCOMING,
 };
 
 static void answer_activated(GSimpleAction *, GVariant *, gpointer);
@@ -413,6 +415,24 @@ void gtk_mod_call_hangup(struct gtk_mod *mod, struct call *call)
 	mqueue_push(mod->mq, MQ_HANGUP, call);
 }
 
+
+struct ua_status {
+	struct gtk_mod *mod;
+	struct ua *ua;
+	enum ua_event ev;
+	struct call *call;
+	char *str;
+};
+
+
+static void ua_status_destructor(void *arg)
+{
+	struct ua_status *status = arg;
+	mem_deref(status->str);
+	mem_deref(status->call);
+}
+
+
 static void ua_event_handler(struct ua *ua,
 		enum ua_event ev,
 		struct call *call,
@@ -420,9 +440,8 @@ static void ua_event_handler(struct ua *ua,
 		void *arg )
 {
 	struct gtk_mod *mod = arg;
-	struct call_window *win;
-
-	gdk_threads_enter();
+	struct ua_status *ua_status;
+	struct pl prm_pl;
 
 	switch (ev) {
 
@@ -430,11 +449,60 @@ static void ua_event_handler(struct ua *ua,
 	case UA_EVENT_UNREGISTERING:
 	case UA_EVENT_REGISTER_OK:
 	case UA_EVENT_REGISTER_FAIL:
-		accounts_menu_set_status(mod, ua, ev);
 		break;
 
 	case UA_EVENT_CALL_INCOMING:
-		notify_incoming_call(mod, call);
+		gmqueue_push(mod->gmq, GMQ_CALL_INCOMING, call);
+		return;
+
+	case UA_EVENT_CALL_RINGING:
+	case UA_EVENT_CALL_PROGRESS:
+	case UA_EVENT_CALL_ESTABLISHED:
+		prm = NULL;
+		break;
+
+	case UA_EVENT_CALL_CLOSED:
+	case UA_EVENT_CALL_TRANSFER_FAILED:
+		break;
+
+	default:
+		break;
+	}
+
+	ua_status = mem_alloc(sizeof *ua_status, ua_status_destructor);
+	if (!ua_status)
+		return;
+
+	ua_status->mod = mod;
+	ua_status->ua = ua;
+	ua_status->ev = ev;
+	ua_status->call = call;
+	if (prm && prm[0]) {
+		pl_set_str(&prm_pl, prm);
+		pl_strdup(&ua_status->str, &prm_pl);
+	} else {
+		ua_status->str = NULL;
+	}
+	gmqueue_push(mod->gmq, GMQ_UA_EVENT, ua_status);
+}
+
+
+/* run in gtk thread */
+static void g_ua_event_handler(struct gtk_mod *mod,
+		struct ua *ua,
+		enum ua_event ev,
+		struct call *call,
+		char *prm)
+{
+	struct call_window *win;
+
+	switch(ev) {
+
+	case UA_EVENT_REGISTERING:
+	case UA_EVENT_UNREGISTERING:
+	case UA_EVENT_REGISTER_OK:
+	case UA_EVENT_REGISTER_FAIL:
+		accounts_menu_set_status(mod, ua, ev);
 		break;
 
 	case UA_EVENT_CALL_CLOSED:
@@ -472,9 +540,8 @@ static void ua_event_handler(struct ua *ua,
 	default:
 		break;
 	}
-
-	gdk_threads_leave();
 }
+
 
 static void message_handler(const struct pl *peer, const struct pl *ctype,
 			    struct mbuf *body, void *arg)
@@ -540,6 +607,7 @@ static void gmqueue_handler(int id, void *data, void *arg)
 {
 	struct gtk_mod *mod = arg;
 	struct call *call;
+	struct ua_status *ua_status;
 
 	switch ((enum gtk_mod_g_events)id) {
 
@@ -551,6 +619,19 @@ static void gmqueue_handler(int id, void *data, void *arg)
 		call = data;
 		if (!new_call_window(mod, call))
 			mqueue_push(mod->mq, MQ_HANGUP, call);
+		break;
+
+	case GMQ_CALL_INCOMING:
+		call = data;
+		notify_incoming_call(mod, call);
+		break;
+
+	case GMQ_UA_EVENT:
+		ua_status = data;
+		call = ua_status->call;
+		g_ua_event_handler(mod, ua_status->ua, ua_status->ev,
+				call, ua_status->str);
+		mem_deref(ua_status);
 		break;
 	}
 }
