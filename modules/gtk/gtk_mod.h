@@ -50,3 +50,6 @@ void transfer_dialog_fail(struct transfer_dialog *, const char *reason);
 /* URI entry combo box */
 GtkWidget *uri_combo_box_new(void);
 const char *uri_combo_box_get_text(GtkComboBox *box);
+
+/* Warning dialog */
+void warning_dialog(const char *title, const char *fmt, ...);
