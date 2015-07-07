@@ -405,6 +405,11 @@ void gtk_mod_call_window_closed(struct gtk_mod *mod, struct call_window *win)
 	mod->call_windows = g_slist_remove(mod->call_windows, win);
 }
 
+void gtk_mod_call_hangup(struct gtk_mod *mod, struct call *call)
+{
+	mqueue_push(mod->mq, MQ_HANGUP, call);
+}
+
 static void ua_event_handler(struct ua *ua,
 		enum ua_event ev,
 		struct call *call,

@@ -37,8 +37,6 @@ struct call_window {
 };
 
 enum call_window_events {
-	MQ_HANGUP,
-	MQ_CLOSE,
 	MQ_HOLD,
 	MQ_MUTE,
 	MQ_TRANSFER,
@@ -125,7 +123,8 @@ void call_window_set_vu_enc(struct call_window *win,
 static void call_on_hangup(GtkToggleButton *btn, struct call_window *win)
 {
 	(void)btn;
-	mqueue_push(win->mq, MQ_CLOSE, win);
+	gtk_mod_call_hangup(win->mod, win->call);
+	call_window_destroy(win);
 }
 
 static void call_on_hold_toggle(GtkToggleButton *btn, struct call_window *win)
@@ -158,7 +157,8 @@ static gboolean call_on_window_close(GtkWidget *widget, GdkEventAny *event,
 {
 	(void)event;
 	(void)widget;
-	mqueue_push(win->mq, MQ_CLOSE, NULL);
+	gtk_mod_call_hangup(win->mod, win->call);
+	call_window_destroy(win);
 	return TRUE;
 }
 
@@ -213,16 +213,6 @@ static void mqueue_handler(int id, void *data, void *arg)
 
 	switch ((enum call_window_events)id) {
 
-	case MQ_HANGUP:
-		ua_hangup(uag_current(), win->call, 0, NULL);
-		break;
-
-	case MQ_CLOSE:
-		ua_hangup(uag_current(), win->call, 0, NULL);
-		win->closed = true;
-		mem_deref(win);
-		break;
-
 	case MQ_MUTE:
 		audio_mute(call_audio(win->call), (size_t)data);
 		break;
@@ -237,20 +227,19 @@ static void mqueue_handler(int id, void *data, void *arg)
 	}
 }
 
-static void call_window_destructor(void *arg)
+void call_window_destroy(struct call_window *window)
 {
-	struct call_window *window = arg;
-
-	gdk_threads_enter();
 	gtk_mod_call_window_closed(window->mod, window);
-	gtk_widget_destroy(window->window);
-	mem_deref(window->transfer_dialog);
-	gdk_threads_leave();
 
+	gtk_widget_destroy(window->window);
+
+	/* TODO: figure out if these need to be called from the re thread */
+	mem_deref(window->transfer_dialog);
 	mem_deref(window->call);
 	mem_deref(window->mq);
 	mem_deref(window->vu.enc);
 	mem_deref(window->vu.dec);
+
 	if (window->duration_timer_tag)
 		g_source_remove(window->duration_timer_tag);
 	if (window->vumeter_timer_tag)
@@ -265,7 +254,7 @@ struct call_window *call_window_new(struct call *call, struct gtk_mod *mod)
 	GtkWidget *duration;
 	int err = 0;
 
-	win = mem_zalloc(sizeof(*win), call_window_destructor);
+	win = g_new(struct call_window, 1);
 	if (!win)
 		return NULL;
 
@@ -388,7 +377,7 @@ struct call_window *call_window_new(struct call *call, struct gtk_mod *mod)
 
 out:
 	if (err)
-		mem_deref(win);
+		g_free(win);
 
 	return win;
 }

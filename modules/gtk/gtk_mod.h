@@ -24,9 +24,11 @@ struct vumeter_dec {
 /* Main menu */
 void gtk_mod_connect(struct gtk_mod *, const char *uri);
 void gtk_mod_call_window_closed(struct gtk_mod *, struct call_window *);
+void gtk_mod_call_hangup(struct gtk_mod *, struct call *);
 
 /* Call Window */
 struct call_window *call_window_new(struct call *call, struct gtk_mod *mod);
+void call_window_destroy(struct call_window *);
 void call_window_set_vu_dec(struct call_window *, struct vumeter_dec *);
 void call_window_set_vu_enc(struct call_window *, struct vumeter_enc *);
 void call_window_transfer(struct call_window *, const char *uri);
