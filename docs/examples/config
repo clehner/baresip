@@ -56,6 +56,7 @@ module			stdio.so
 #module			cons.so
 #module			evdev.so
 #module			httpd.so
+#module	    		gtk.so
 
 # Audio codec Modules (in order)
 module			opus.so
@@ -132,7 +133,6 @@ module_app		menu.so
 #module_app		presence.so
 #module_app		syslog.so
 module_app		vidloop.so
-#module_app		gtk.so
 
 
 #------------------------------------------------------------------------------
