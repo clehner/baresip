@@ -31,6 +31,7 @@
 struct gtk_mod {
 	pthread_t thread;
 	bool run;
+	bool stop_all;
 	bool contacts_inited;
 	bool accounts_inited;
 	struct mqueue *mq;
@@ -46,7 +47,7 @@ struct gtk_mod {
 	GSList *call_windows;
 };
 
-struct gtk_mod mod_obj;
+struct gtk_mod mod_obj = {0};
 
 static struct aufilt vumeter;
 
@@ -67,6 +68,7 @@ enum gtk_mod_g_events {
 
 static void answer_activated(GSimpleAction *, GVariant *, gpointer);
 static void reject_activated(GSimpleAction *, GVariant *, gpointer);
+static int module_quit(struct gtk_mod *);
 
 static GActionEntry app_entries[] = {
 	{"answer", answer_activated, "x", NULL, NULL, {0} },
@@ -131,6 +133,7 @@ static void menu_on_quit(GtkMenuItem *menuItem, gpointer arg)
 	gtk_widget_destroy(GTK_WIDGET(mod->app_menu));
 	g_object_unref(G_OBJECT(mod->status_icon));
 
+	mod->stop_all = true;
 	gtk_main_quit();
 }
 
@@ -568,8 +571,9 @@ static void mqueue_handler(int id, void *data, void *arg)
 	case MQ_INIT:
 		aufilt_register(&vumeter);
 		err  = cmd_register(cmdv, ARRAY_SIZE(cmdv));
-		err |= uag_event_register(ua_event_handler, &mod_obj);
-		err |= message_init(message_handler, &mod_obj);
+		err |= uag_event_register(ua_event_handler, mod);
+		err |= message_init(message_handler, mod);
+		mod->run = true;
 		if (err) {
 			warning_dialog("Error initializing baresip",
 					"Error: %m", err);
@@ -599,8 +603,11 @@ static void mqueue_handler(int id, void *data, void *arg)
 
 	case MQ_QUIT:
 		info("quit from gtk\n");
-		ua_stop_all(false);
-		info("ok\n");
+		message_close();
+		uag_event_unregister(ua_event_handler);
+		cmd_unregister(cmdv);
+		aufilt_unregister(&vumeter);
+		module_quit(mod);
 		break;
 
 	case MQ_ANSWER:
@@ -896,25 +903,35 @@ static gboolean quitter(void *unused)
 	return G_SOURCE_REMOVE;
 }
 
+static int module_quit(struct gtk_mod *mod)
+{
+	int err = 0;
+
+	if (mod->thread) {
+		err = pthread_join(mod->thread, NULL);
+		if (err) {
+			error("pthread_join: %m\n", err);
+		}
+		mod->thread = 0;
+	}
+	if (mod->stop_all)
+		ua_stop_all(false);
+
+	return err;
+}
+
 static int module_close(void)
 {
 	int err;
 
 	if (mod_obj.run) {
-		message_close();
-		uag_event_unregister(ua_event_handler);
-		cmd_unregister(cmdv);
-		aufilt_unregister(&vumeter);
-
 		/* quit GTK main loop, asynchronously */
 		g_idle_add(quitter, NULL);
 	}
+	err = module_quit(&mod_obj);
 
-	err = pthread_join(mod_obj.thread, NULL);
-	if (err) {
-		error("pthread_join: %m\n", err);
-	}
-	mem_deref(mod_obj.mq);
+	mod_obj.mq = mem_deref(mod_obj.mq);
+	gmqueue_destroy(mod_obj.gmq);
 
 	return err;
 }
