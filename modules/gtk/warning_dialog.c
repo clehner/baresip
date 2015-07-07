@@ -11,7 +11,7 @@
 
 struct warning_prm {
 	const char *title;
-	struct mbuf *msg;
+	char *msg;
 };
 
 
@@ -28,7 +28,7 @@ static void warning_dialog_real(struct warning_prm *prm)
 	dialog = gtk_message_dialog_new(NULL, 0, GTK_MESSAGE_ERROR,
 			GTK_BUTTONS_CLOSE, "%s", prm->title);
 	gtk_message_dialog_format_secondary_text(GTK_MESSAGE_DIALOG(dialog),
-			"%s", mbuf_buf(prm->msg));
+			"%s", prm->msg);
 	g_signal_connect_swapped(G_OBJECT(dialog), "response",
 			G_CALLBACK(gtk_widget_destroy), dialog);
 	gtk_window_set_title(GTK_WINDOW(dialog), prm->title);
@@ -53,7 +53,6 @@ void warning_dialog(const char *title, const char *fmt, ...)
 {
 	va_list ap;
 	struct warning_prm *prm;
-	struct mbuf *str_buf;
 
 	va_start(ap, fmt);
 
@@ -61,12 +60,7 @@ void warning_dialog(const char *title, const char *fmt, ...)
 	if (!prm)
 		goto err;
 
-	str_buf = mbuf_alloc(64);
-	if (!str_buf)
-		goto err;
-	prm->msg = str_buf;
-
-	if (mbuf_vprintf(str_buf, fmt, ap) || mbuf_write_u8(str_buf, '\0'))
+	if (re_vsdprintf(&prm->msg, fmt, ap) < 0)
 		goto err;
 
 	prm->title = title;
