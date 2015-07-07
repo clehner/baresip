@@ -520,26 +520,6 @@ void gtk_mod_connect(struct gtk_mod *mod, const char *uri)
 	mqueue_push(mod->mq, MQ_CONNECT, (char *)uri);
 }
 
-static void warning_dialog(const char *title, const char *fmt, ...)
-{
-	va_list ap;
-	char msg[512];
-	GtkWidget *dialog;
-
-	va_start(ap, fmt);
-	(void)re_vsnprintf(msg, sizeof msg, fmt, ap);
-	va_end(ap);
-
-	dialog = gtk_message_dialog_new(NULL, 0, GTK_MESSAGE_ERROR,
-			GTK_BUTTONS_CLOSE, "%s", title);
-	gtk_message_dialog_format_secondary_text(GTK_MESSAGE_DIALOG(dialog),
-			"%s", msg);
-	g_signal_connect_swapped(G_OBJECT(dialog), "response",
-			G_CALLBACK(gtk_widget_destroy), dialog);
-	gtk_window_set_title(GTK_WINDOW(dialog), title);
-	gtk_widget_show(dialog);
-}
-
 
 static void mqueue_handler(int id, void *data, void *arg)
 {
@@ -558,11 +538,8 @@ static void mqueue_handler(int id, void *data, void *arg)
 		err |= uag_event_register(ua_event_handler, &mod_obj);
 		err |= message_init(message_handler, &mod_obj);
 		if (err) {
-			gdk_threads_enter();
 			warning_dialog("Error initializing baresip",
 					"Error: %m", err);
-			gdk_threads_leave();
-			break;
 		}
 		break;
 
@@ -576,11 +553,9 @@ static void mqueue_handler(int id, void *data, void *arg)
 		uri = data;
 		err = ua_connect(ua, &call, NULL, uri, NULL, VIDMODE_ON);
 		if (err) {
-			gdk_threads_enter();
 			warning_dialog("Call failed",
 					"Connecting to \"%s\" failed.\n"
 					"Error: %m", uri, err);
-			gdk_threads_leave();
 			break;
 		}
 		gdk_threads_enter();
@@ -606,13 +581,11 @@ static void mqueue_handler(int id, void *data, void *arg)
 		call = data;
 		err = ua_answer(ua, call);
 		if (err) {
-			gdk_threads_enter();
 			warning_dialog("Call failed",
 					"Answering the call "
 					"from \"%s\" failed.\n"
 					"Error: %m",
 					call_peername(call), err);
-			gdk_threads_leave();
 			break;
 		}
 
