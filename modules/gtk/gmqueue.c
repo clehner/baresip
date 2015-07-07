@@ -58,5 +58,5 @@ void gmqueue_push(struct gmqueue *gmq, int id, void *data)
 	item->mq = gmq;
 	item->id = id;
 	item->data = data;
-	gdk_threads_add_idle(on_idle, item);
+	g_idle_add(on_idle, item);
 }

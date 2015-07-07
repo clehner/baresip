@@ -719,7 +719,6 @@ static void *gtk_thread(void *arg)
 	GtkWidget *item;
 	GError *error = NULL;
 
-	gdk_threads_init();
 	gtk_init(0, NULL);
 
 	g_set_application_name("baresip");

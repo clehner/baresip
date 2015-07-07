@@ -63,7 +63,7 @@ void warning_dialog(const char *title, const char *fmt, ...)
 		goto err;
 
 	prm->title = title;
-	gdk_threads_add_idle(on_idle, prm);
+	g_idle_add(on_idle, prm);
 	goto out;
 
  err:
