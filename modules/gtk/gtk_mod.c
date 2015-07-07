@@ -139,7 +139,7 @@ static void menu_on_dial(GtkMenuItem *menuItem, gpointer arg)
 	struct gtk_mod *mod = arg;
 	(void)menuItem;
 	if (!mod->dial_dialog)
-		 mod->dial_dialog = dial_dialog_alloc(mod);
+		 mod->dial_dialog = dial_dialog_new(mod);
 	dial_dialog_show(mod->dial_dialog);
 }
 
@@ -738,7 +738,7 @@ static void *gtk_thread(void *arg)
 	mqueue_push(mod->mq, MQ_QUIT, 0);
 
 	if (mod->dial_dialog) {
-		mem_deref(mod->dial_dialog);
+		dial_dialog_destroy(mod->dial_dialog);
 		mod->dial_dialog = NULL;
 	}
 

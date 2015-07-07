@@ -39,8 +39,9 @@ bool call_window_is_for_call(struct call_window *, struct call *);
 bool call_window_is_for_audio(struct call_window *, struct audio *);
 
 /* Dial Dialog */
-struct dial_dialog *dial_dialog_alloc(struct gtk_mod *);
+struct dial_dialog *dial_dialog_new(struct gtk_mod *);
 void dial_dialog_show(struct dial_dialog *);
+void dial_dialog_destroy(struct dial_dialog *);
 
 /* Call transfer dialog */
 struct transfer_dialog *transfer_dialog_alloc(struct call_window *);

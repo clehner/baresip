@@ -32,21 +32,14 @@ static void dial_dialog_on_response(GtkDialog *dialog, gint response_id,
 }
 
 
-static void destructor(void *arg)
-{
-	struct dial_dialog *dd = arg;
-
-	gtk_widget_destroy(dd->dialog);
-}
-
-struct dial_dialog *dial_dialog_alloc(struct gtk_mod *mod)
+struct dial_dialog *dial_dialog_new(struct gtk_mod *mod)
 {
 	struct dial_dialog *dd;
 	GtkWidget *dial;
 	GtkWidget *content, *button, *image;
 	GtkWidget *uri_combobox;
 
-	dd = mem_zalloc(sizeof(*dd), destructor);
+	dd = g_new(struct dial_dialog, 1);
 	if (!dd)
 		return NULL;
 
@@ -88,6 +81,14 @@ struct dial_dialog *dial_dialog_alloc(struct gtk_mod *mod)
 
 	return dd;
 }
+
+
+void dial_dialog_destroy(struct dial_dialog *dd)
+{
+	gtk_widget_destroy(dd->dialog);
+	g_free(dd);
+}
+
 
 void dial_dialog_show(struct dial_dialog *dd)
 {
