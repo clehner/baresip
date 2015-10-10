@@ -428,7 +428,7 @@ static struct call_window *new_call_window(struct gtk_mod *mod,
 		struct call *call)
 {
 	struct call_window *win = call_window_new(call, mod);
-	if (call) {
+	if (win) {
 		mod->call_windows = g_slist_append(mod->call_windows, win);
 	}
 	return win;

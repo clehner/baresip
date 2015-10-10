@@ -424,8 +424,10 @@ struct call_window *call_window_new(struct call *call, struct gtk_mod *mod)
 	got_call_window(win);
 
 out:
-	if (err)
+	if (err) {
 		mem_deref(win);
+		return NULL;
+	}
 
 	return win;
 }
