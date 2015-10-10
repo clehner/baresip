@@ -429,7 +429,9 @@ static struct call_window *new_call_window(struct gtk_mod *mod,
 {
 	struct call_window *win = call_window_new(call, mod);
 	if (win) {
+		gdk_threads_enter();
 		mod->call_windows = g_slist_append(mod->call_windows, win);
+		gdk_threads_leave();
 	}
 	return win;
 }
@@ -658,9 +660,7 @@ static void mqueue_handler(int id, void *data, void *arg)
 			gdk_threads_leave();
 			break;
 		}
-		gdk_threads_enter();
 		err = new_call_window(mod, call) == NULL;
-		gdk_threads_leave();
 		if (err) {
 			ua_hangup(ua, call, 500, "Server Error");
 		}
@@ -689,9 +689,7 @@ static void mqueue_handler(int id, void *data, void *arg)
 			break;
 		}
 
-		gdk_threads_enter();
 		err = new_call_window(mod, call) == NULL;
-		gdk_threads_leave();
 		if (err) {
 			ua_hangup(ua, call, 500, "Server Error");
 		}

@@ -270,6 +270,7 @@ static void mqueue_handler(int id, void *data, void *arg)
 	}
 }
 
+/* deref call_window struct only from re thread */
 static void call_window_destructor(void *arg)
 {
 	struct call_window *window = arg;
@@ -281,20 +282,21 @@ static void call_window_destructor(void *arg)
 		transfer_dialog_destroy(window->transfer_dialog);
 		window->transfer_dialog = NULL;
 	}
+	if (window->duration_timer_tag)
+		g_source_remove(window->duration_timer_tag);
+	if (window->vumeter_timer_tag)
+		g_source_remove(window->vumeter_timer_tag);
+	/* TODO: avoid race conditions here? */
+	last_call_win = NULL;
 	gdk_threads_leave();
 
 	mem_deref(window->call);
 	mem_deref(window->mq);
 	mem_deref(window->vu.enc);
 	mem_deref(window->vu.dec);
-	if (window->duration_timer_tag)
-		g_source_remove(window->duration_timer_tag);
-	if (window->vumeter_timer_tag)
-		g_source_remove(window->vumeter_timer_tag);
-	/* TODO: avoid race conditions here */
-	last_call_win = NULL;
 }
 
+/* call from re thread */
 struct call_window *call_window_new(struct call *call, struct gtk_mod *mod)
 {
 	struct call_window *win;
@@ -311,6 +313,9 @@ struct call_window *call_window_new(struct call *call, struct gtk_mod *mod)
 	if (err)
 		goto out;
 
+	win->call = mem_ref(call);
+
+	gdk_threads_enter();
 	window = gtk_window_new(GTK_WINDOW_TOPLEVEL);
 	gtk_window_set_title(GTK_WINDOW(window), call_peeruri(call));
 	gtk_window_set_type_hint(GTK_WINDOW(window),
@@ -412,7 +417,6 @@ struct call_window *call_window_new(struct call *call, struct gtk_mod *mod)
 	g_signal_connect(window, "key-release-event",
 			G_CALLBACK(call_on_key_release), win);
 
-	win->call = mem_ref(call);
 	win->mod = mod;
 	win->window = window;
 	win->transfer_dialog = NULL;
@@ -425,6 +429,7 @@ struct call_window *call_window_new(struct call *call, struct gtk_mod *mod)
 	win->vu.dec = NULL;
 
 	got_call_window(win);
+	gdk_threads_leave();
 
 out:
 	if (err) {
