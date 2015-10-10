@@ -42,9 +42,10 @@ struct dial_dialog *dial_dialog_alloc(struct gtk_mod *);
 void dial_dialog_show(struct dial_dialog *);
 
 /* Call transfer dialog */
-struct transfer_dialog *transfer_dialog_alloc(struct call_window *);
+struct transfer_dialog *transfer_dialog_new(struct call_window *);
 void transfer_dialog_show(struct transfer_dialog *);
 void transfer_dialog_fail(struct transfer_dialog *, const char *reason);
+void transfer_dialog_destroy(struct transfer_dialog *);
 
 /* URI entry combo box */
 GtkWidget *uri_combo_box_new(void);

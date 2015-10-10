@@ -51,21 +51,20 @@ static void on_dialog_response(GtkDialog *dialog, gint response_id,
 }
 
 
-static void destructor(void *arg)
+void transfer_dialog_destroy(struct transfer_dialog *td)
 {
-	struct transfer_dialog *td = arg;
-
 	gtk_widget_destroy(td->dialog);
+	g_free(td);
 }
 
 
-struct transfer_dialog *transfer_dialog_alloc(struct call_window *call_win)
+struct transfer_dialog *transfer_dialog_new(struct call_window *call_win)
 {
 	struct transfer_dialog *win;
 	GtkWidget *dialog, *content, *button, *image, *hbox, *spinner, *label;
 	GtkWidget *uri_combobox;
 
-	win = mem_zalloc(sizeof(*win), destructor);
+	win = g_try_malloc(sizeof *win);
 	if (!win)
 	    return NULL;
 

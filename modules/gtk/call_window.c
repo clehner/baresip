@@ -181,7 +181,7 @@ static void call_on_transfer(GtkToggleButton *btn, struct call_window *win)
 {
 	(void)btn;
 	if (!win->transfer_dialog)
-		win->transfer_dialog = transfer_dialog_alloc(win);
+		win->transfer_dialog = transfer_dialog_new(win);
 	else
 		transfer_dialog_show(win->transfer_dialog);
 }
@@ -277,7 +277,10 @@ static void call_window_destructor(void *arg)
 	gdk_threads_enter();
 	gtk_mod_call_window_closed(window->mod, window);
 	gtk_widget_destroy(window->window);
-	mem_deref(window->transfer_dialog);
+	if (window->transfer_dialog) {
+		transfer_dialog_destroy(window->transfer_dialog);
+		window->transfer_dialog = NULL;
+	}
 	gdk_threads_leave();
 
 	mem_deref(window->call);
@@ -459,7 +462,10 @@ void call_window_closed(struct call_window *win, const char *reason)
 		status = "closed";
 	}
 	call_window_set_status(win, status);
-	win->transfer_dialog = mem_deref(win->transfer_dialog);
+	if (win->transfer_dialog) {
+		transfer_dialog_destroy(win->transfer_dialog);
+		win->transfer_dialog = NULL;
+	}
 }
 
 void call_window_ringing(struct call_window *win)
